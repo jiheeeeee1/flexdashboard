@@ -1,0 +1,287 @@
+---
+title: "당신의 드림카를 찾아라"
+author: "1-3 Jihui Cho"
+date: "2023-02-15"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+    theme: readable
+    runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+
+library(flexdashboard)
+library(ggplot2)
+library(plotly)
+library(shiny)
+library(plyr)
+library(dplyr)
+library(tm)
+library(tidyverse)
+library(tidytext)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+
+```
+
+
+
+```{r}
+
+setwd("C:/codelab1")
+car<-read.csv("Car_sales.csv")
+
+```
+
+
+
+```{r}
+
+car$Manufacturer1=car$Manufacturer
+CORPUS=Corpus(VectorSource(car$Manufacturer1))
+DTM=DocumentTermMatrix(CORPUS)
+DTM=as.data.frame(as.matrix(DTM))
+car=cbind(car, DTM)
+First_CAR=c()
+for(i in 1:NROW(car$Manufacturer)){
+  First_CAR[i]=strsplit(as.character(car$Manufacturer[i]),",")[[1]][1]
+}
+car$Manufacturer1=First_CAR
+
+```
+
+
+
+DASHBOARD{car-icon="fa-check"}
+======================================================
+
+Column {.sidebar}
+------------------------------------------------------
+
+Today : 2023-02-15 WED    
+
+Description :    
+배너변수
+
+
+```{R}
+
+selectInput('Manufacturer', 'Manufacturer',car$Manufacturer,
+            selected='Audi')
+
+numericInput("Horsepower", "min Rating:",0.11 )
+
+```
+
+
+ROW{imdb-height=10}
+--------------------------------------------------------
+
+### Target of Dashboard
+
+주제: 브랜드별 비교를 할 수 있는 동적 대시보드 구현
+
+
+ROW
+----------------------------------------------------
+
+### Cars
+```{r}
+valueBox(value = paste(nrow(car)), "Cars",
+         icon = "fa-car",
+         color = "royalblue")
+```
+
+
+### Brand
+```{r}
+selectedcar = reactive({
+  subset(car,First_CAR==input$Manufacturer)
+})
+```
+
+```{r}
+renderValueBox({
+  valueBox(
+    value = nrow(selectedcar()),
+    icon = "fa-money-bill",
+    color = ifelse(nrow(selectedcar()) < 1, "warning", "primary")
+  )
+})
+
+
+```
+
+Row
+------------------------------------
+
+### Horsepower
+```{r}
+renderGauge({
+  gauge(round(mean(selectedcar()$Horsepower,na.rm = TRUE),2), 
+        min = 55, max = 450, 
+      gaugeSectors(
+  success = c(300, 450), warning = c(150, 299), danger = c(0, 149)
+))
+})
+
+```
+
+### Fuel capacity
+```{r}
+renderGauge({
+  gauge(round(mean(selectedcar()$Fuel_capacity,na.rm = TRUE),2), 
+        min = 10.3, max = 32, 
+      gaugeSectors(
+  success = c(22, 32), warning = c(12, 21), danger = c(0, 11)
+))
+})
+
+```
+
+### Fuel efficiency
+```{r}
+renderGauge({
+  gauge(round(mean(selectedcar()$Fuel_efficiency,na.rm = TRUE),2), 
+        min = 15, max = 45, 
+      gaugeSectors(
+  success = c(38, 45), warning = c(25, 37), danger = c(15, 24)
+))
+})
+
+```
+
+
+Row {IMDB-width=650}
+------------------------ 
+
+### 모델별 구입가격
+```{r, fig.width=5, fig.height=10}
+
+renderPlotly({
+ Model1 = selectedcar() %>%
+  group_by(Model) %>%
+  dplyr::summarise(MEAN = mean(Price_in_thousands, na.rm = TRUE),
+                   MEDIAN = median(Price_in_thousands, na.rm = TRUE))
+ p = ggplot(Model1) +
+  geom_line(aes(x=Model,y=MEAN),group = 1 , col ='red') +
+  geom_point(aes(x=Model,y=MEAN), col ='red') +
+  geom_line(aes(x=Model,y=MEDIAN),group = 1 , col = 'royalblue') +
+  geom_point(aes(x=Model,y=MEDIAN) , col = 'royalblue') +
+  xlab("Model") + ylab("Price_in_thousands") +
+  theme_bw()
+ ggplotly(p)
+})
+
+ 
+
+```
+
+
+### 모델별 판매가격
+```{r, fig.width=5, fig.height=20}
+
+renderPlotly({
+ Model1 = selectedcar() %>%
+  group_by(Model) %>%
+  dplyr::summarise(MEAN = mean(Sales_in_thousands, na.rm = TRUE),
+                   MEDIAN = median(Sales_in_thousands, na.rm = TRUE))
+ p = ggplot(Model1) +
+  geom_line(aes(x=Model,y=MEAN),group = 1 , col ='#008000') +
+  geom_point(aes(x=Model,y=MEAN), col = '#008000') +
+  geom_line(aes(x=Model,y=MEDIAN),group = 1 , col = '#696969') +
+  geom_point(aes(x=Model,y=MEDIAN) , col = '#696969') +
+  xlab("Model") + ylab("Sales_in_thousands") +
+ theme_bw()
+ ggplotly(p)
+})
+
+
+```
+
+
+Row {IMDB-width=650}
+-------------------------------
+
+### Data Table
+```{r, fig.height=10}
+selectedcar2 = reactive({
+  subset(car,First_CAR==input$Manufacturer & Horsepower > input$Horsepower)
+})
+
+```
+
+
+
+```{r, fig.height=10}
+renderTable({
+ DF = selectedcar2()[,c(2,3,4:12)]
+ DF[order(-DF$Horsepower),]
+})
+
+
+
+```
+~~~
+
+
+Graph{car-icon="fa-check"}
+======================================================
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+
+### 워드클라우드
+```{r}
+car2<-as_tibble(car)
+attach(car2)
+car3 <- count(car2, Manufacturer)
+car4<-wordcloud2(car3)
+car4
+```
+
+### 의사결정나무: 출력에 따른 제조사 분류
+```{r}
+train<-sample(0:155, 50)
+car2<-as_tibble(car)
+car4<-rpart(Manufacturer ~ Horsepower, data=car2, subset=train, method="class")
+rpart.plot(car4)
+```
+
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### 브랜드별 역률과 마력 간 관계
+```{r}
+ggplot(car, aes(x=Power_perf_factor, y=Engine_size))+
+       geom_point(aes(col=Manufacturer, size=Price_in_thousands))+
+       geom_smooth(method="auto",se=F) + #loess or lm 선택가능
+       xlim(c(22, 190)) +
+       ylim(c(0, 9))+
+       labs(subtitle = "Power perf factor vs Fuel efficiency",
+           y="Power perf factor",
+           x="Engine_size") +
+           theme_bw()
+
+```
+
+### 브랜드별 연료 효율성과 출력 간 관계
+```{r}
+ggplot(car, aes(x=Horsepower, y=Fuel_efficiency))+
+       geom_point(aes(col=Manufacturer, size=Price_in_thousands))+
+       geom_smooth(method="auto",se=F) + #loess or lm 선택가능
+       xlim(c(50, 460)) +
+       ylim(c(10, 50))+
+       labs(subtitle = "Horsepower vs Fuel efficiency",
+           y="Horsepower",
+           x="Fuel_efficiency") +
+           theme_bw()
+
+```
